@@ -286,7 +286,15 @@ kubectl create deployment nginx-deployment --image=nginx:latest --replicas=3 --d
 ```
 
 ---
+🧪 Exec into Running Pod (like docker exec -it)
 
-*✅ The rest of the sections (Namespaces, Affinity, DaemonSets, Services, ConfigMaps, Secrets, StatefulSets, etc.) will follow the same format.*
+Find Pod Name:
 
-Shall I continue with **Part 2: Namespaces, Nodes, and Affinity** in the same document?
+kubectl get pods
+
+Exec into Container:
+
+kubectl exec -it <pod-name> -- /bin/sh     # For busybox/nginx
+kubectl exec -it <pod-name> -- /bin/bash   # If bash is available
+
+✅ Equivalent to docker exec -it. You can inspect files with commands like ls, cat, cd, etc.
