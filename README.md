@@ -1,300 +1,136 @@
-# kubernetes_lab 
-# Kubernetes Hands-On Lab (With Declarative YAML & Imperative Commands)
+# Kubernetes Lab Part 2: Namespaces, Nodes, Affinity, and Resources
 
-## Part 1: Pods, ReplicaSets, and Deployments
-
-### 1. Create a Pod named `redis` using the image `redis`
-
-**YAML (redis-pod.yaml):**
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: redis
-spec:
-  containers:
-  - name: redis
-    image: redis
-```
-
-**Commands:**
+## 1. How many Namespaces exist?
 
 ```bash
-kubectl apply -f redis-pod.yaml
-kubectl run redis --image=redis --restart=Never
+kubectl get namespaces
 ```
 
----
+✅ Expect: `default`, `kube-system`, `kube-public`, `kube-node-lease`
 
-### 2. Create a Pod named `nginx` using an invalid image `nginx123`
-
-**YAML (nginx-pod.yaml):**
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: nginx
-spec:
-  containers:
-  - name: nginx
-    image: nginx123
-```
-
-**Commands:**
+## 2. How many Pods exist in the kube-system namespace?
 
 ```bash
-kubectl apply -f nginx-pod.yaml
-kubectl run nginx --image=nginx123 --restart=Never
+kubectl get pods -n kube-system
 ```
 
----
+## 3. Create Deployment in namespace `finance`
 
-### 3. Check the nginx Pod Status
-
-```bash
-kubectl get pods
-```
-
-*Expected: ImagePullBackOff or ErrImagePull*
-
----
-
-### 4. Fix the image and re-create the Pod
-
-**YAML (nginx-fixed-pod.yaml):**
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: nginx
-spec:
-  containers:
-  - name: nginx
-    image: nginx
-```
-
-**Commands:**
-
-```bash
-kubectl delete pod nginx
-kubectl apply -f nginx-fixed-pod.yaml
-kubectl run nginx --image=nginx --restart=Never
-```
-
----
-
-### 5. Check how many ReplicaSets exist
-
-```bash
-kubectl get rs
-```
-
-*Expected: 0*
-
----
-
-### 6. Create a ReplicaSet with 3 Pods using image busybox
-
-**YAML (replicaset.yaml):**
-
-```yaml
-apiVersion: apps/v1
-kind: ReplicaSet
-metadata:
-  name: replica-set-1
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: busybox-app
-  template:
-    metadata:
-      labels:
-        app: busybox-app
-    spec:
-      containers:
-      - name: busybox
-        image: busybox
-        command: ["sleep", "3600"]
-```
-
-**Command:**
-
-```bash
-kubectl apply -f replicaset.yaml
-```
-
-*Imperative `kubectl run` does not support ReplicaSet directly.*
-
----
-
-### 7. Scale the ReplicaSet to 5 Pods
-
-```bash
-kubectl scale rs replica-set-1 --replicas=5
-```
-
----
-
-### 8. Check READY status in ReplicaSet
-
-```bash
-kubectl get rs replica-set-1
-```
-
-*Expected: READY 5/5*
-
----
-
-### 9. Delete a Pod and observe ReplicaSet behavior
-
-```bash
-kubectl delete pod <pod-name>
-kubectl get pods -l app=busybox-app
-```
-
-*Expected: Still 5 pods*
-
----
-
-### 10. Check number of Deployments and ReplicaSets
-
-```bash
-kubectl get deploy
-kubectl get rs
-```
-
-*Expected: 0 Deployments, 1 ReplicaSet*
-
----
-
-### 11. Create a Deployment with busybox (3 replicas)
-
-**YAML (deployment-1.yaml):**
+📄 YAML File:
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: deployment-1
+  name: beta
+  namespace: finance
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
-      app: busybox-deploy
+      app: redis-app
   template:
     metadata:
       labels:
-        app: busybox-deploy
+        app: redis-app
     spec:
       containers:
-      - name: busybox
-        image: busybox
-        command: ["sleep", "3600"]
+      - name: redis
+        image: redis
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "2Gi"
 ```
 
-**Commands:**
+▶️ Commands:
 
 ```bash
-kubectl apply -f deployment-1.yaml
-kubectl create deployment deployment-1 --image=busybox --replicas=3 --dry-run=client -o yaml > temp.yaml
-# Then edit 'temp.yaml' to add sleep and apply
+kubectl create namespace finance
+kubectl apply -f beta-deployment.yaml
+# OR imperative
+kubectl create deployment beta --image=redis --replicas=2 -n finance
+# NOTE: Use `kubectl edit` to add resource requests/limits manually in imperative flow
 ```
 
----
-
-### 12. Check number of Deployments and ReplicaSets
+## 4. How many Nodes exist?
 
 ```bash
-kubectl get deploy
-kubectl get rs
+kubectl get nodes
 ```
 
-*Expected: 1 Deployment, 2 ReplicaSets (including replica-set-1)*
-
----
-
-### 13. How many pods are ready for deployment-1?
+## 5. Check Taints on master node
 
 ```bash
-kubectl get pods -l app=busybox-deploy
+kubectl describe node <master-node-name>
 ```
 
----
-
-### 14. Update deployment-1 image to nginx
+✅ Look for:
 
 ```bash
-kubectl set image deployment deployment-1 busybox=nginx
-kubectl rollout status deployment deployment-1
+Taints: node-role.kubernetes.io/master:NoSchedule
 ```
 
----
-
-### 15. Check events and update strategy
+## 6. Label master node with color=blue
 
 ```bash
-kubectl describe deployment deployment-1
+kubectl label node <master-node-name> color=blue
+kubectl get nodes --show-labels
 ```
 
-*Expected: Strategy is RollingUpdate*
+## 7. Create Deployment with Node Affinity to color=blue
 
----
-
-### 16. Rollback deployment-1 to busybox
-
-```bash
-kubectl rollout undo deployment deployment-1
-```
-
----
-
-### 17. Create labeled Deployment using `nginx:latest`
-
-**YAML (nginx-deployment.yaml):**
+📄 YAML File:
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: blue
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: nginx-app
+      app: nginx-blue
   template:
     metadata:
       labels:
-        app: nginx-app
-        type: front-end
+        app: nginx-blue
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: color
+                operator: In
+                values:
+                - blue
       containers:
-      - name: nginx-container
-        image: nginx:latest
+      - name: nginx
+        image: nginx
 ```
 
-**Commands:**
+▶️ Command:
 
 ```bash
-kubectl apply -f nginx-deployment.yaml
-kubectl create deployment nginx-deployment --image=nginx:latest --replicas=3 --dry-run=client -o yaml > nginx-deployment.yaml
-# Then edit to add labels
+kubectl apply -f blue-affinity-deployment.yaml
 ```
 
 ---
-🧪 Exec into Running Pod (like docker exec -it)
 
-Find Pod Name:
+## 🔍 Bonus: Docker-like exec
 
-kubectl get pods
+```bash
+kubectl get pods -n finance
+kubectl exec -it <pod-name> -n finance -- /bin/bash
+# or /bin/sh depending on image (e.g. redis, nginx use sh)
 
-Exec into Container:
+# Check resource requests for a running pod:
+kubectl describe pod <pod-name> -n finance
+```
 
-kubectl exec -it <pod-name> -- /bin/sh     # For busybox/nginx
-kubectl exec -it <pod-name> -- /bin/bash   # If bash is available
-
-✅ Equivalent to docker exec -it. You can inspect files with commands like ls, cat, cd, etc.
+---
