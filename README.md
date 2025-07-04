@@ -1,293 +1,369 @@
-# kubernetes_lab 
-# Kubernetes Hands-On Lab (With Declarative YAML & Imperative Commands)
-
-## Part 1: Pods, ReplicaSets, and Deployments
-
-### 1. Create a Pod named `redis` using the image `redis`
-
-**YAML (redis-pod.yaml):**
-
-```yaml
-apiVersion: v1
-kind: Pod
+Kubernetes Lab Part 3: DaemonSets, Services, Static Pods, Networking
+This lab will take you from DaemonSets to static pods with YAMLs, kubectl commands, and full explanations.
+________________________________________
+1. How many DaemonSets are created in the cluster in all namespaces?
+▶️ Command:
+kubectl get daemonsets --all-namespaces
+✅ Explanation: This shows all DaemonSets running across the cluster.
+________________________________________
+2. What DaemonSets exist in the kube-system namespace?
+▶️ Command:
+kubectl get daemonsets -n kube-system
+________________________________________
+3. What is the image used by the pod deployed by the kube-proxy DaemonSet?
+▶️ Command:
+kubectl get daemonset kube-proxy -n kube-system -o jsonpath='{.spec.template.spec.containers[0].image}'
+✅ Output: Will show something like: k8s.gcr.io/kube-proxy:v1.29.0
+________________________________________
+4. Deploy a DaemonSet for Fluentd Logging
+📄 YAML File:
+# fluentd-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
 metadata:
-  name: redis
+  name: elasticsearch
+  namespace: kube-system
 spec:
-  containers:
-  - name: redis
-    image: redis
-```
-
-**Commands:**
-
-```bash
-kubectl apply -f redis-pod.yaml
-kubectl run redis --image=redis --restart=Never
-```
-
----
-
-### 2. Create a Pod named `nginx` using an invalid image `nginx123`
-
-**YAML (nginx-pod.yaml):**
-
-```yaml
+  selector:
+    matchLabels:
+      name: elasticsearch
+  template:
+    metadata:
+      labels:
+        name: elasticsearch
+    spec:
+      containers:
+      - name: fluentd
+        image: k8s.gcr.io/fluentd-elasticsearch:1.20
+▶️ Command:
+kubectl apply -f fluentd-daemonset.yaml
+________________________________________
+5. Deploy a Pod named nginx-pod using the nginx:alpine image with label tier=backend
+📄 YAML File:
+# nginx-pod.yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx
+  name: nginx-pod
+  labels:
+    tier: backend
 spec:
   containers:
   - name: nginx
-    image: nginx123
-```
-
-**Commands:**
-
-```bash
+    image: nginx:alpine
+▶️ Command:
 kubectl apply -f nginx-pod.yaml
-kubectl run nginx --image=nginx123 --restart=Never
-```
-
----
-
-### 3. Check the nginx Pod Status
-
-```bash
-kubectl get pods
-```
-
-*Expected: ImagePullBackOff or ErrImagePull*
-
----
-
-### 4. Fix the image and re-create the Pod
-
-**YAML (nginx-fixed-pod.yaml):**
-
-```yaml
+________________________________________
+6. Deploy a test pod using nginx:alpine
+📄 YAML File:
+# test-pod.yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx
+  name: test-pod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    command: ["sleep"]
+    args: ["3600"]
+▶️ Command:
+kubectl apply -f test-pod.yaml
+________________________________________
+7. Create a service backend-service to expose the backend pod on port 80
+▶️ Command:
+kubectl expose pod nginx-pod --port=80 --name=backend-service
+________________________________________
+8. Curl the backend-service from the test pod
+▶️ Command:
+kubectl exec -it test-pod -- curl backend-service
+✅ Explanation: Should return the default NGINX welcome page HTML.
+________________________________________
+9. Create a deployment named web-app using the image nginx with 2 replicas
+📄 YAML File:
+# web-app-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+▶️ Command:
+kubectl apply -f web-app-deployment.yaml
+________________________________________
+10. Expose the web-app deployment as web-app-service on port 80, NodePort 30082
+▶️ Command:
+kubectl expose deployment web-app --name=web-app-service --port=80 --target-port=80 --type=NodePort
+kubectl patch svc web-app-service -p '{"spec": {"ports": [{"port": 80, "targetPort": 80, "nodePort": 30082}]}}'
+________________________________________
+11. Access the web app from the node
+▶️ Command:
+curl http://<node-ip>:30082
+✅ Expected: Default NGINX page
+________________________________________
+12. How many static pods exist in this cluster in all namespaces?
+▶️ Command:
+kubectl get pods --all-namespaces -o wide | grep static
+📌 Or manually inspect:
+sudo ls /etc/kubernetes/manifests/
+✅ Explanation: Static pods are defined directly on node in the above folder.
+________________________________________
+13. On which nodes are the static pods currently created?
+▶️ Command:
+kubectl get pods -A -o wide | grep static
+✅ Explanation: Column NODE will show which node they're on.
+________________________________________
+✅ This completes your advanced DaemonSet + Networking + Static Pod Lab.
+Let me know when you're ready for:
+•	ConfigMap/Secret Volumes
+•	Ingress with domain routing
+•	Health checks & Probes
+•	StatefulSets
+•	Persistent Volumes & Claims
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Kubernetes Lab Part 4: ConfigMaps, Secrets, Multi-Container Pods, Init Containers, PVCs
+________________________________________
+1. How many ConfigMaps exist in the environment?
+▶️ Command:
+kubectl get configmaps --all-namespaces
+________________________________________
+2. Create a ConfigMap webapp-config-map
+📄 YAML:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-config-map
+  namespace: default
+data:
+  APP_COLOR: darkblue
+▶️ Command:
+kubectl apply -f webapp-config-map.yaml
+________________________________________
+3. Create webapp-color pod using the ConfigMap
+📄 YAML:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webapp-color
 spec:
   containers:
   - name: nginx
     image: nginx
-```
-
-**Commands:**
-
-```bash
-kubectl delete pod nginx
-kubectl apply -f nginx-fixed-pod.yaml
-kubectl run nginx --image=nginx --restart=Never
-```
-
----
-
-### 5. Check how many ReplicaSets exist
-
-```bash
-kubectl get rs
-```
-
-*Expected: 0*
-
----
-
-### 6. Create a ReplicaSet with 3 Pods using image busybox
-
-**YAML (replicaset.yaml):**
-
-```yaml
-apiVersion: apps/v1
-kind: ReplicaSet
+    envFrom:
+    - configMapRef:
+        name: webapp-config-map
+▶️ Command:
+kubectl apply -f webapp-color.yaml
+________________________________________
+4. How many Secrets exist?
+▶️ Command:
+kubectl get secrets --all-namespaces
+________________________________________
+5. How many secrets are defined in the default token?
+▶️ Command:
+kubectl describe secret $(kubectl get secret | grep default-token | awk '{print $1}')
+________________________________________
+6. Create a pod db-pod using MySQL 5.7
+📄 YAML:
+apiVersion: v1
+kind: Pod
 metadata:
-  name: replica-set-1
+  name: db-pod
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: busybox-app
-  template:
-    metadata:
-      labels:
-        app: busybox-app
-    spec:
-      containers:
-      - name: busybox
-        image: busybox
-        command: ["sleep", "3600"]
-```
-
-**Command:**
-
-```bash
-kubectl apply -f replicaset.yaml
-```
-
-*Imperative `kubectl run` does not support ReplicaSet directly.*
-
----
-
-### 7. Scale the ReplicaSet to 5 Pods
-
-```bash
-kubectl scale rs replica-set-1 --replicas=5
-```
-
----
-
-### 8. Check READY status in ReplicaSet
-
-```bash
-kubectl get rs replica-set-1
-```
-
-*Expected: READY 5/5*
-
----
-
-### 9. Delete a Pod and observe ReplicaSet behavior
-
-```bash
-kubectl delete pod <pod-name>
-kubectl get pods -l app=busybox-app
-```
-
-*Expected: Still 5 pods*
-
----
-
-### 10. Check number of Deployments and ReplicaSets
-
-```bash
-kubectl get deploy
-kubectl get rs
-```
-
-*Expected: 0 Deployments, 1 ReplicaSet*
-
----
-
-### 11. Create a Deployment with busybox (3 replicas)
-
-**YAML (deployment-1.yaml):**
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
+  containers:
+  - name: mysql
+    image: mysql:5.7
+▶️ Command:
+kubectl apply -f db-pod.yaml
+________________________________________
+7. Why is db-pod not ready?
+✅ Because MySQL requires environment variables such as MYSQL_ROOT_PASSWORD to be defined, otherwise it fails readiness checks.
+________________________________________
+8. Create secret db-secret
+▶️ Command:
+kubectl create secret generic db-secret \
+  --from-literal=MYSQL_DATABASE=sql01 \
+  --from-literal=MYSQL_USER=user1 \
+  --from-literal=MYSQL_PASSWORD=password \
+  --from-literal=MYSQL_ROOT_PASSWORD=password123
+________________________________________
+9. Recreate db-pod with secret envs
+📄 YAML:
+apiVersion: v1
+kind: Pod
 metadata:
-  name: deployment-1
+  name: db-pod
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: busybox-deploy
-  template:
-    metadata:
-      labels:
-        app: busybox-deploy
-    spec:
-      containers:
-      - name: busybox
-        image: busybox
-        command: ["sleep", "3600"]
-```
-
-**Commands:**
-
-```bash
-kubectl apply -f deployment-1.yaml
-kubectl create deployment deployment-1 --image=busybox --replicas=3 --dry-run=client -o yaml > temp.yaml
-# Then edit 'temp.yaml' to add sleep and apply
-```
-
----
-
-### 12. Check number of Deployments and ReplicaSets
-
-```bash
-kubectl get deploy
-kubectl get rs
-```
-
-*Expected: 1 Deployment, 2 ReplicaSets (including replica-set-1)*
-
----
-
-### 13. How many pods are ready for deployment-1?
-
-```bash
-kubectl get pods -l app=busybox-deploy
-```
-
----
-
-### 14. Update deployment-1 image to nginx
-
-```bash
-kubectl set image deployment deployment-1 busybox=nginx
-kubectl rollout status deployment deployment-1
-```
-
----
-
-### 15. Check events and update strategy
-
-```bash
-kubectl describe deployment deployment-1
-```
-
-*Expected: Strategy is RollingUpdate*
-
----
-
-### 16. Rollback deployment-1 to busybox
-
-```bash
-kubectl rollout undo deployment deployment-1
-```
-
----
-
-### 17. Create labeled Deployment using `nginx:latest`
-
-**YAML (nginx-deployment.yaml):**
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
+  containers:
+  - name: mysql
+    image: mysql:5.7
+    envFrom:
+    - secretRef:
+        name: db-secret
+▶️ Command:
+kubectl delete pod db-pod
+kubectl apply -f db-pod.yaml
+________________________________________
+10. Create multi-container pod yellow
+📄 YAML:
+apiVersion: v1
+kind: Pod
 metadata:
-  name: nginx-deployment
+  name: yellow
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: nginx-app
-  template:
-    metadata:
-      labels:
-        app: nginx-app
-        type: front-end
-    spec:
-      containers:
-      - name: nginx-container
-        image: nginx:latest
-```
+  containers:
+  - name: lemon
+    image: busybox
+    command: ["sleep"]
+    args: ["3600"]
+  - name: gold
+    image: redis
+▶️ Command:
+kubectl apply -f yellow.yaml
+________________________________________
+11. Create pod red with initContainer
+📄 YAML:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: red
+spec:
+  initContainers:
+  - name: init-sleep
+    image: busybox
+    command: ['sh', '-c', 'sleep 20']
+  containers:
+  - name: redis
+    image: redis
+▶️ Command:
+kubectl apply -f red.yaml
+________________________________________
+12. Create pod print-envars-greeting
+📄 YAML:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: print-envars-greeting
+spec:
+  containers:
+  - name: print-env-container
+    image: bash
+    command: ["sh", "-c"]
+    args: ["echo $GREETING $COMPANY $GROUP && sleep 10"]
+    env:
+    - name: GREETING
+      value: "Welcome to"
+    - name: COMPANY
+      value: "DevOps"
+    - name: GROUP
+      value: "Industries"
+▶️ Command:
+kubectl apply -f print-envars.yaml
+kubectl logs -f print-envars-greeting
+________________________________________
+13. Where is the default kubeconfig located?
+📍 ~/.kube/config
+________________________________________
+14. How many clusters are defined in kubeconfig?
+▶️ Command:
+kubectl config view -o jsonpath='{.clusters[*].name}'
+________________________________________
+15. What is the user in the current context?
+▶️ Command:
+kubectl config view --minify -o jsonpath='{.users[0].name}'
+________________________________________
+16. Create a PersistentVolume pv-log
+📄 YAML:
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-log
+spec:
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /pv/log
+▶️ Command:
+kubectl apply -f pv-log.yaml
+________________________________________
+17. Create PersistentVolumeClaim claim-log-1
+📄 YAML:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claim-log-1
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Mi
+▶️ Command:
+kubectl apply -f pvc-claim-log.yaml
+________________________________________
+18. Create webapp pod using PVC
+📄 YAML:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webapp
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: log-volume
+      mountPath: /var/log/nginx
+  volumes:
+  - name: log-volume
+    persistentVolumeClaim:
+      claimName: claim-log-1
+▶️ Command:
+kubectl apply -f webapp.yaml
 
-**Commands:**
 
-```bash
-kubectl apply -f nginx-deployment.yaml
-kubectl create deployment nginx-deployment --image=nginx:latest --replicas=3 --dry-run=client -o yaml > nginx-deployment.yaml
-# Then edit to add labels
-```
-
----
-🧪 Exec into Running Pod (like docker exec -it)
-
-Find Pod Name:
-
-kubectl exec  -it nginx-deployment-74c684b9f6-xjr77  -c nginx-container -- /bin/bash 
