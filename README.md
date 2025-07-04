@@ -132,40 +132,6 @@ Let me know when you're ready for:
 •	StatefulSets
 •	Persistent Volumes & Claims
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Kubernetes Lab Part 4: ConfigMaps, Secrets, Multi-Container Pods, Init Containers, PVCs
-________________________________________
 1. How many ConfigMaps exist in the environment?
 ▶️ Command:
 kubectl get configmaps --all-namespaces
@@ -365,5 +331,36 @@ spec:
       claimName: claim-log-1
 ▶️ Command:
 kubectl apply -f webapp.yaml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
