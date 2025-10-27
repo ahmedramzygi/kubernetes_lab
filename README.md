@@ -1,4 +1,4 @@
-# kubernetes_lab 
+# kubernetes_lab 1
 # Kubernetes Hands-On Lab (With Declarative YAML & Imperative Commands)
 
 ## Part 1: Pods, ReplicaSets, and Deployments
